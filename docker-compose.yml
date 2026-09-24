@@ -1,0 +1,14 @@
+services:
+  donkey-follicle-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    ports:
+      - "${DONKEY_API_PORT:-8000}:8000"
+    environment:
+      DONKEY_API_KEY: "${DONKEY_API_KEY:?请在.env中设置DONKEY_API_KEY}"
+      DONKEY_ENABLE_DOCS: "${DONKEY_ENABLE_DOCS:-true}"
+      DONKEY_CORS_ORIGINS: "${DONKEY_CORS_ORIGINS:-}"
+      DONKEY_LOG_LEVEL: "${DONKEY_LOG_LEVEL:-INFO}"
+

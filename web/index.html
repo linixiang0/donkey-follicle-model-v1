@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="排卵模型第一版">
+  <title>排卵模型第一版</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>排卵模型第一版</h1>
+    <div id="serviceStatus" class="service-status checking">
+      <span class="status-dot"></span><span>正在连接模型</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="workspace">
+      <aside class="panel input-panel">
+        <div class="panel-heading">
+          <div><h2>录入本次摸排</h2></div>
+          <button id="fillDemo" type="button" class="text-button">填入示例</button>
+        </div>
+
+        <form id="predictionForm" novalidate>
+          <div class="field full">
+            <label for="currentTime">当前摸排时间（北京时间）</label>
+            <input id="currentTime" type="datetime-local" required>
+          </div>
+
+          <div class="ovary-grid">
+            <fieldset class="ovary-card">
+              <legend>左侧卵泡</legend>
+              <div class="segmented" data-side="left">
+                <button type="button" data-value="mm" class="active">直径</button>
+                <button type="button" data-value="SF">SF</button>
+                <button type="button" data-value="CL">CL</button>
+              </div>
+              <div class="measure-row" id="leftMeasureRow">
+                <input id="leftMm" type="number" min="1" max="60" step="0.1" value="35.0" inputmode="decimal">
+                <span>mm</span>
+              </div>
+              <input id="leftStatus" type="hidden" value="mm">
+            </fieldset>
+
+            <fieldset class="ovary-card">
+              <legend>右侧卵泡</legend>
+              <div class="segmented" data-side="right">
+                <button type="button" data-value="mm" class="active">直径</button>
+                <button type="button" data-value="SF">SF</button>
+                <button type="button" data-value="CL">CL</button>
+              </div>
+              <div class="measure-row" id="rightMeasureRow">
+                <input id="rightMm" type="number" min="1" max="60" step="0.1" value="28.0" inputmode="decimal">
+                <span>mm</span>
+              </div>
+              <input id="rightStatus" type="hidden" value="mm">
+            </fieldset>
+          </div>
+
+          <details class="optional-block" id="previousBlock">
+            <summary>
+              <span><strong>上一次摸排</strong><small>用于估计个体生长速度</small></span>
+              <span class="summary-action">添加</span>
+            </summary>
+            <div class="details-content field-grid two">
+              <div class="field full">
+                <label for="previousTime">上次摸排时间</label>
+                <input id="previousTime" type="datetime-local">
+              </div>
+              <div class="field full">
+                <label for="previousMm">上次最大卵泡</label>
+                <div class="unit-input"><input id="previousMm" type="number" min="1" max="60" step="0.1" value="31.0"><span>mm</span></div>
+              </div>
+            </div>
+          </details>
+
+          <div id="formError" class="form-error" role="alert" hidden></div>
+          <button id="predictButton" class="primary-button" type="submit">
+            <span>生成成熟与排卵预测</span><span aria-hidden="true">→</span>
+          </button>
+        </form>
+      </aside>
+
+      <section class="results-column">
+        <div id="emptyState" class="panel empty-state">
+          <h2>等待本次摸排数据</h2>
+          <p>生成预测后，这里将显示成熟时间、排卵窗口和随时间变化的卵泡趋势。</p>
+        </div>
+
+        <div id="resultContent" hidden>
+          <section class="panel result-header">
+            <div>
+              <h2 id="resultTitle">预测结果</h2>
+              <p id="resultSubtitle"></p>
+            </div>
+            <div id="supportBadge" class="support-badge">支持度 --</div>
+          </section>
+
+          <section id="postOvulation" class="panel post-ovulation" hidden>
+            <span class="result-icon">✓</span>
+            <div><h3>当前已观察到黄体（CL）</h3><p id="postOvulationText"></p></div>
+          </section>
+
+          <section id="predictionResults">
+            <div class="metric-grid">
+              <article class="metric-card maturity">
+                <div class="metric-label"><span class="metric-dot"></span>预计达到成熟参考</div>
+                <strong id="maturityCountdown">--</strong>
+                <span id="maturityTime">--</span>
+                <small id="maturityWindow">--</small>
+              </article>
+              <article class="metric-card ovulation">
+                <div class="metric-label"><span class="metric-dot"></span>预计排卵中心</div>
+                <strong id="ovulationCountdown">--</strong>
+                <span id="ovulationTime">--</span>
+                <small id="ovulationWindow">--</small>
+              </article>
+              <article class="metric-card check">
+                <div class="metric-label"><span class="metric-dot"></span>建议下次超声</div>
+                <strong id="checkCountdown">--</strong>
+                <span id="checkTime">--</span>
+                <small>窗口内复查可继续缩小不确定性</small>
+              </article>
+            </div>
+
+            <section class="panel chart-panel">
+              <div class="chart-heading">
+                <div><div><h2>卵泡大小随时间变化</h2><p>实测记录为实线点，未来部分为模型推算。</p></div></div>
+                <div class="legend">
+                  <span><i class="legend-line actual"></i>实测</span>
+                  <span><i class="legend-line forecast"></i>中心预测</span>
+                  <span><i class="legend-area"></i>快慢范围</span>
+                </div>
+              </div>
+              <div id="chartTooltip" class="chart-tooltip" hidden></div>
+              <div class="chart-wrap">
+                <svg id="growthChart" viewBox="0 0 960 430" role="img" aria-label="卵泡直径随时间变化的预测图"></svg>
+              </div>
+              <div class="timeline-control">
+                <button id="playTimeline" type="button" class="play-button" aria-label="自动播放时间推演">▶</button>
+                <div>
+                  <div class="timeline-label"><span>时间推演</span><strong id="timelineReadout">当前摸排</strong></div>
+                  <input id="timelineSlider" type="range" min="0" max="100" value="0" step="1">
+                </div>
+              </div>
+              <p class="chart-note">阴影表示基于快、慢生长速度得到的直径范围，并非真实置信区间；排卵后卵泡不再按该曲线继续生长。</p>
+            </section>
+
+            <section class="detail-grid">
+              <article class="panel detail-card">
+                <h3>本次计算依据</h3>
+                <dl>
+                  <div><dt>当前最大卵泡</dt><dd id="currentMax">--</dd></div>
+                  <div><dt>采用生长速度</dt><dd id="growthRate">--</dd></div>
+                  <div><dt>成熟参考直径</dt><dd id="maturityReference">--</dd></div>
+                  <div><dt>排卵前参考直径</dt><dd id="ovulationReference">--</dd></div>
+                </dl>
+                <p id="supportNote" class="support-note"></p>
+              </article>
+              <article class="panel detail-card">
+                <h3>风险提示</h3>
+                <ul id="warningList" class="warning-list"></ul>
+              </article>
+            </section>
+          </section>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <span>结果用于辅助安排复查和配种，不替代兽医超声判断。</span>
+  </footer>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

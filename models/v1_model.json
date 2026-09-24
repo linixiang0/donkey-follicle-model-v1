@@ -1,0 +1,99 @@
+{
+  "model_version": "1.0.0",
+  "created_at_utc": "2026-09-10T09:31:12.460552+00:00",
+  "model_type": "local interval calibration plus literature-informed growth model",
+  "local_calibration": {
+    "source_file": "b_estrus_breeding_mapping_processed(6).xlsx",
+    "usable_rows": 957,
+    "unique_donkeys": 432,
+    "unique_estrus_cycles": 557,
+    "raw_interval_cycles": 333,
+    "valid_interval_cycles": 319,
+    "excluded_cycles": 14,
+    "anchors": [
+      {
+        "diameter_mm": 30.0,
+        "n": 15,
+        "median_hours": 96.01,
+        "q25_hours": 95.83,
+        "q75_hours": 96.61,
+        "p90_hours": 142.99
+      },
+      {
+        "diameter_mm": 35.0,
+        "n": 170,
+        "median_hours": 72.04,
+        "q25_hours": 71.66,
+        "q75_hours": 72.48,
+        "p90_hours": 119.7
+      },
+      {
+        "diameter_mm": 40.0,
+        "n": 133,
+        "median_hours": 48.19,
+        "q25_hours": 47.78,
+        "q75_hours": 72.32,
+        "p90_hours": 96.05
+      }
+    ],
+    "validation": {
+      "scheme": "5-fold split by donkey_id",
+      "n": 319,
+      "unique_donkeys": 274,
+      "mae_hours": 11.01,
+      "median_absolute_error_hours": 0.46,
+      "within_12_hours_pct": 76.8,
+      "within_24_hours_pct": 78.37,
+      "target": "first verified CL observation time; not true ovulation time"
+    },
+    "label_definition": "last numeric scan before first row with pl_or_not=1 and CL; event is interval-censored"
+  },
+  "literature_priors": {
+    "breed_profiles": {
+      "dezhou": {
+        "display_name": "东阿/德州驴（默认）",
+        "growth_rate_mm_day_mean": 4.32,
+        "growth_rate_mm_day_sd": 1.64,
+        "maturity_reference_mm": 37.0,
+        "preovulatory_reference_mm": 44.99,
+        "single_interval_weight": 0.35,
+        "note": "37 mm为可修改的成熟参考；生长和排卵前直径使用德州驴研究先验。"
+      },
+      "generic": {
+        "display_name": "品种不确定/其他驴",
+        "growth_rate_mm_day_mean": 3.15,
+        "growth_rate_mm_day_sd": 0.6,
+        "maturity_reference_mm": 37.0,
+        "preovulatory_reference_mm": 40.7,
+        "single_interval_weight": 0.35,
+        "note": "沿用上一版汇总表的保守生长速度和37 mm成熟参考。"
+      }
+    },
+    "induction_window_hours": [
+      24.0,
+      48.0
+    ],
+    "references": [
+      {
+        "title": "Unraveling the Transcriptomic Profiles of Large and Small Donkey Follicles",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/40428424/",
+        "use": "37 mm成熟参考；排卵卵泡最大直径约40.7 mm（新疆驴研究）"
+      },
+      {
+        "title": "Estrus synchronization and follicular development patterns in jennies",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/41654244/",
+        "use": "德州驴生长4.32±1.64 mm/天；排卵前直径44.99±1.70 mm"
+      },
+      {
+        "title": "Efficacy of hCG and GnRH for inducing ovulation in the jenny",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/17716724/",
+        "use": "促排后24-48小时风险窗口；卵泡越大，距排卵越短"
+      }
+    ]
+  },
+  "disabled_features": {
+    "weather": "No visit-level weather linkage or transferable hour-level coefficient in V1.",
+    "temperature": "Recorded for future calibration only; not used in prediction.",
+    "humidity": "Recorded for future calibration only; not used in prediction."
+  }
+}
