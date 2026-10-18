@@ -66,9 +66,11 @@ docker compose up -d --build
 
 状态值：
 
-- `mm`：有毫米数值，此时必须提供`value_mm`；
-- `SF`：小卵泡，此时`value_mm`必须为`null`；
+- `mm`：30～60 mm数值（含30和60），此时必须提供`value_mm`；
+- `SF`：小于30 mm的小卵泡，此时`value_mm`必须为`null`；
 - `CL`：已观察到黄体，此时接口返回`post_ovulation`，不继续预测未来排卵。
+
+左右侧的毫米数值分别校验；即使另一侧有效，任意一侧以`mm`提交小于30或大于60的数值也会返回HTTP 422。`previous.max_follicle_mm`同样限定30～60 mm；上次仅有SF时省略`previous`或设为`null`。左右均为SF时无法预测，返回HTTP 422。小于30的数值不会自动改写成SF，请调用方明确提交状态。
 
 所有时间必须使用ISO 8601格式并带时区，例如`2026-09-23T10:00:00+08:00`。
 

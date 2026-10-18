@@ -64,6 +64,45 @@ class ModelCoreTests(unittest.TestCase):
         self.assertGreaterEqual(result.ovulation_lower_hours, 12)
         self.assertLessEqual(result.ovulation_upper_hours, 36)
 
+    def test_out_of_range_current_diameter_is_rejected(self):
+        # 1 mm曾产生177.1～168小时的倒置窗口，必须在计算前拒绝。
+        for diameter in (1.0, 29.9, 60.1, float("nan"), float("inf")):
+            with self.subTest(diameter=diameter):
+                with self.assertRaisesRegex(ValueError, "30～60"):
+                    predict(PredictionInput(self.now, diameter), self.model)
+
+    def test_out_of_range_history_is_rejected(self):
+        for diameter in (1.0, 29.9, 60.1, float("nan"), float("inf")):
+            with self.subTest(diameter=diameter):
+                with self.assertRaisesRegex(ValueError, "上次最大卵泡"):
+                    predict(
+                        PredictionInput(
+                            self.now, 35.0,
+                            previous_max_mm=diameter,
+                            previous_time=self.now - timedelta(days=1),
+                        ),
+                        self.model,
+                    )
+
+    def test_allowed_range_keeps_ordered_windows(self):
+        for profile in ("dezhou", "generic"):
+            for index in range(300, 601):
+                diameter = index / 10
+                for previous_mm in (None, 30.0, 35.0, 60.0):
+                    with self.subTest(profile=profile, diameter=diameter, previous=previous_mm):
+                        result = predict(
+                            PredictionInput(
+                                self.now, diameter, profile,
+                                previous_max_mm=previous_mm,
+                                previous_time=self.now - timedelta(days=1) if previous_mm is not None else None,
+                            ),
+                            self.model,
+                        )
+                        self.assertLessEqual(result.maturity_lower_hours, result.maturity_center_hours)
+                        self.assertLessEqual(result.maturity_center_hours, result.maturity_upper_hours)
+                        self.assertLessEqual(result.ovulation_lower_hours, result.ovulation_center_hours)
+                        self.assertLessEqual(result.ovulation_center_hours, result.ovulation_upper_hours)
+
 
 if __name__ == "__main__":
     unittest.main()

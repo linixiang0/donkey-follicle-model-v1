@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 
 import streamlit as st
 
-from model_core import DEFAULT_MODEL_PATH, PredictionInput, at_time, load_model, predict
+from model_core import DEFAULT_MODEL_PATH, MAX_FOLLICLE_MM, MIN_FOLLICLE_MM, PredictionInput, at_time, load_model, predict
 
 
 st.set_page_config(page_title="东阿驴卵泡成熟与排卵预测", layout="wide")
@@ -32,7 +32,7 @@ def fmt_dt(value: datetime) -> str:
 def follicle_input(label: str, key: str):
     status = st.selectbox(label, ["毫米数值", "SF", "CL"], key=f"{key}_status")
     if status == "毫米数值":
-        size = st.number_input(f"{label}直径（mm）", min_value=1.0, max_value=60.0, value=35.0, step=0.5, key=f"{key}_mm")
+        size = st.number_input(f"{label}直径（mm）", min_value=MIN_FOLLICLE_MM, max_value=MAX_FOLLICLE_MM, value=35.0, step=0.5, key=f"{key}_mm")
         return status, float(size)
     return status, None
 
@@ -43,6 +43,7 @@ display_to_key = {value["display_name"]: key for key, value in profiles.items()}
 
 st.title("东阿驴卵泡成熟与排卵预测 V1")
 st.caption("本场历史数据校准＋驴繁殖文献先验。输出用于安排复查和配种，不替代兽医超声判断。")
+st.caption("毫米数值限定为30～60 mm（含边界）；小于30 mm请选择SF，SF和CL不填写直径。")
 
 with st.sidebar:
     st.subheader("模型状态")
@@ -75,7 +76,7 @@ with st.expander("可选：上一次摸排，用于估计个体生长速度"):
     use_previous = st.checkbox("填写上一次记录")
     previous_day = st.date_input("上次日期", value=date.today(), disabled=not use_previous)
     previous_clock = st.time_input("上次时间", value=time(8, 0), disabled=not use_previous)
-    previous_mm = st.number_input("上次最大卵泡（mm）", min_value=1.0, max_value=60.0, value=30.0, step=0.5, disabled=not use_previous)
+    previous_mm = st.number_input("上次最大卵泡（mm）", min_value=MIN_FOLLICLE_MM, max_value=MAX_FOLLICLE_MM, value=30.0, step=0.5, disabled=not use_previous, help="上次仅有SF时，不勾选填写上一次记录。")
 
 with st.expander("可选：促排信息"):
     induced = st.checkbox("已使用hCG或GnRH等促排方案")

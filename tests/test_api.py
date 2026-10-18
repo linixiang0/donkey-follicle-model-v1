@@ -89,6 +89,47 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(denied.json()["error"]["code"], "UNAUTHORIZED")
         self.assertEqual(allowed.status_code, 200)
 
+    def test_current_numeric_range_on_each_side(self):
+        for side in ("left", "right"):
+            for diameter, expected_status in ((1.0, 422), (29.9, 422), (30.0, 200), (60.0, 200), (60.1, 422)):
+                with self.subTest(side=side, diameter=diameter):
+                    payload = self.sample_payload()
+                    payload[side] = {"status": "mm", "value_mm": diameter}
+                    response = self.client.post("/v1/predict", json=payload)
+                    self.assertEqual(response.status_code, expected_status)
+                    if expected_status == 422:
+                        self.assertEqual(response.json()["error"]["code"], "VALIDATION_ERROR")
+                    else:
+                        self.assertEqual(response.json()["current_max_mm"], max(35.0, diameter) if side == "right" else diameter)
+
+    def test_history_numeric_range(self):
+        for diameter, expected_status in ((1.0, 422), (29.9, 422), (30.0, 200), (60.0, 200), (60.1, 422)):
+            with self.subTest(diameter=diameter):
+                payload = self.sample_payload()
+                payload["previous"] = {
+                    "time": "2026-09-22T10:00:00+08:00",
+                    "max_follicle_mm": diameter,
+                }
+                response = self.client.post("/v1/predict", json=payload)
+                self.assertEqual(response.status_code, expected_status)
+
+    def test_sf_and_cl_still_require_null_numeric_value(self):
+        for status in ("SF", "CL"):
+            for value, expected_status in ((None, 200), (30.0, 422)):
+                with self.subTest(status=status, value=value):
+                    payload = self.sample_payload()
+                    payload["right"] = {"status": status, "value_mm": value}
+                    response = self.client.post("/v1/predict", json=payload)
+                    self.assertEqual(response.status_code, expected_status)
+
+    def test_openapi_advertises_numeric_limits(self):
+        schemas = self.client.get("/openapi.json").json()["components"]["schemas"]
+        numeric = next(item for item in schemas["FollicleMeasurement"]["properties"]["value_mm"]["anyOf"] if item["type"] == "number")
+        previous = schemas["PreviousMeasurement"]["properties"]["max_follicle_mm"]
+        for field in (numeric, previous):
+            self.assertEqual(field["minimum"], 30.0)
+            self.assertEqual(field["maximum"], 60.0)
+
 
 if __name__ == "__main__":
     unittest.main()

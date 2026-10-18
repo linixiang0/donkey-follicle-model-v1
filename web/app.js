@@ -90,7 +90,7 @@ function measurement(side) {
   const status = $(`${side}Status`).value;
   if (status !== "mm") return { status, value_mm: null };
   const value = Number($(`${side}Mm`).value);
-  if (!Number.isFinite(value) || value <= 0 || value > 60) throw new Error(`${side === "left" ? "左" : "右"}侧卵泡直径应在 1–60 mm 之间`);
+  if (!Number.isFinite(value) || value < 30 || value > 60) throw new Error(`${side === "left" ? "左" : "右"}侧卵泡直径应在30～60 mm之间（含边界）；小于30 mm请选择SF`);
   return { status: "mm", value_mm: value };
 }
 
@@ -106,7 +106,7 @@ function buildPayload() {
   if ($("previousBlock").open) {
     const time = toChinaIso($("previousTime").value);
     const maxMm = Number($("previousMm").value);
-    if (!time || !Number.isFinite(maxMm) || maxMm <= 0 || maxMm > 60) throw new Error("请完整填写有效的上一次摸排时间和最大卵泡");
+    if (!time || !Number.isFinite(maxMm) || maxMm < 30 || maxMm > 60) throw new Error("请填写有效的上次摸排时间和30～60 mm的最大卵泡；上次仅有SF时请收起上一次摸排，不提供该历史记录");
     if (new Date(time) >= new Date(currentTime)) throw new Error("上一次摸排时间必须早于当前摸排时间");
     previous = { time, max_follicle_mm: maxMm };
   }

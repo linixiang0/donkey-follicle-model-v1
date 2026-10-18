@@ -38,7 +38,7 @@
                 <button type="button" data-value="CL">CL</button>
               </div>
               <div class="measure-row" id="leftMeasureRow">
-                <input id="leftMm" type="number" min="1" max="60" step="0.1" value="35.0" inputmode="decimal">
+                <input id="leftMm" type="number" min="30" max="60" step="0.1" value="35.0" inputmode="decimal">
                 <span>mm</span>
               </div>
               <input id="leftStatus" type="hidden" value="mm">
@@ -52,16 +52,18 @@
                 <button type="button" data-value="CL">CL</button>
               </div>
               <div class="measure-row" id="rightMeasureRow">
-                <input id="rightMm" type="number" min="1" max="60" step="0.1" value="28.0" inputmode="decimal">
+                <input id="rightMm" type="number" min="30" max="60" step="0.1" value="30.0" inputmode="decimal">
                 <span>mm</span>
               </div>
               <input id="rightStatus" type="hidden" value="mm">
             </fieldset>
           </div>
 
+          <p class="support-note">直径数值限定30～60 mm（含边界）；小于30 mm请选择SF。SF和CL不填写直径。</p>
+
           <details class="optional-block" id="previousBlock">
             <summary>
-              <span><strong>上一次摸排</strong><small>用于估计个体生长速度</small></span>
+              <span><strong>上一次摸排</strong><small>用于估计个体生长速度；仅有SF时不添加</small></span>
               <span class="summary-action">添加</span>
             </summary>
             <div class="details-content field-grid two">
@@ -71,7 +73,7 @@
               </div>
               <div class="field full">
                 <label for="previousMm">上次最大卵泡</label>
-                <div class="unit-input"><input id="previousMm" type="number" min="1" max="60" step="0.1" value="31.0"><span>mm</span></div>
+                <div class="unit-input"><input id="previousMm" type="number" min="30" max="60" step="0.1" value="31.0"><span>mm</span></div>
               </div>
             </div>
           </details>

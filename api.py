@@ -19,7 +19,15 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from model_core import DEFAULT_MODEL_PATH, PredictionInput, at_time, load_model, predict
+from model_core import (
+    DEFAULT_MODEL_PATH,
+    MAX_FOLLICLE_MM,
+    MIN_FOLLICLE_MM,
+    PredictionInput,
+    at_time,
+    load_model,
+    predict,
+)
 
 
 logging.basicConfig(
@@ -41,8 +49,13 @@ class FollicleStatus(str, Enum):
 class FollicleMeasurement(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    status: FollicleStatus = Field(description="mm=有毫米数值，SF=小卵泡，CL=已观察到黄体")
-    value_mm: float | None = Field(default=None, gt=0, le=60)
+    status: FollicleStatus = Field(description="mm=30～60 mm数值，SF=小于30 mm的小卵泡，CL=已观察到黄体")
+    value_mm: float | None = Field(
+        default=None,
+        ge=MIN_FOLLICLE_MM,
+        le=MAX_FOLLICLE_MM,
+        description="status为mm时必填，范围30～60 mm（含边界）；SF或CL时必须为空。",
+    )
 
     @model_validator(mode="after")
     def check_value(self) -> "FollicleMeasurement":
@@ -57,7 +70,11 @@ class PreviousMeasurement(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     time: datetime
-    max_follicle_mm: float = Field(gt=0, le=60)
+    max_follicle_mm: float = Field(
+        ge=MIN_FOLLICLE_MM,
+        le=MAX_FOLLICLE_MM,
+        description="上次最大卵泡直径，30～60 mm（含边界）；上次仅有SF时不提交previous。",
+    )
 
 
 class InductionInformation(BaseModel):

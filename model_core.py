@@ -9,6 +9,8 @@ from typing import Any, Optional
 
 
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "models" / "v1_model.json"
+MIN_FOLLICLE_MM = 30.0
+MAX_FOLLICLE_MM = 60.0
 
 
 @dataclass(frozen=True)
@@ -131,10 +133,15 @@ def _recommend_check(current_mm: float, ovulation_lower: float) -> tuple[float, 
 
 
 def predict(item: PredictionInput, model: dict[str, Any]) -> PredictionOutput:
-    if not math.isfinite(item.current_max_mm) or item.current_max_mm <= 0:
-        raise ValueError("当前最大卵泡必须是大于0的毫米数值")
-    if item.current_max_mm > 60:
-        raise ValueError("当前最大卵泡超过60 mm，请核对录入值或交由兽医判断")
+    if not math.isfinite(item.current_max_mm) or not (
+        MIN_FOLLICLE_MM <= item.current_max_mm <= MAX_FOLLICLE_MM
+    ):
+        raise ValueError("当前最大卵泡直径必须在30～60 mm之间（含边界）；小于30 mm请记为SF。")
+    if item.previous_max_mm is not None and (
+        not math.isfinite(item.previous_max_mm)
+        or not MIN_FOLLICLE_MM <= item.previous_max_mm <= MAX_FOLLICLE_MM
+    ):
+        raise ValueError("上次最大卵泡直径必须在30～60 mm之间（含边界）；上次仅有SF时请不提供该历史记录。")
 
     profiles = model["literature_priors"]["breed_profiles"]
     if item.breed_profile not in profiles:
@@ -192,6 +199,9 @@ def predict(item: PredictionInput, model: dict[str, Any]) -> PredictionOutput:
                     ov_lower = min(ov_lower, drug_lower)
                     ov_upper = max(ov_upper, drug_upper)
                     ov_center = (ov_lower + ov_upper) / 2
+
+    if not (0 <= ov_lower <= ov_center <= ov_upper):
+        raise ValueError("排卵时间窗口无效，请核对输入和模型参数。")
 
     support_level, support_note = _support(item.current_max_mm, anchors)
     if item.induced_ovulation and warnings and "不重叠" in warnings[-1]:
