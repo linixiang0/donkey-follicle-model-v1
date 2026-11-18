@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from breeding_core import BreedingMethod, recommend_breeding
 from model_core import (
     DEFAULT_MODEL_PATH,
     MAX_FOLLICLE_MM,
@@ -99,6 +100,7 @@ class PredictRequest(BaseModel):
                 "animal_id": "370001",
                 "current_time": "2026-09-23T10:00:00+08:00",
                 "breed_profile": "dezhou",
+                "breeding_method": "fresh",
                 "left": {"status": "mm", "value_mm": 35.0},
                 "right": {"status": "SF", "value_mm": None},
                 "previous": {
@@ -114,6 +116,14 @@ class PredictRequest(BaseModel):
     animal_id: str | None = Field(default=None, max_length=100)
     current_time: datetime
     breed_profile: Literal["dezhou", "generic"] = "dezhou"
+    breeding_method: BreedingMethod = Field(
+        default=BreedingMethod.FRESH,
+        description="默认fresh（按本场主要的鲜精人工授精场景直接预测，无需填写）。保留natural/cooled/frozen/unspecified供已有接口兼容。",
+    )
+    breeding_lead_hours: float | None = Field(
+        default=None, ge=0, allow_inf_nan=False,
+        description="现场已确认的排卵前提前量（小时）。自然/鲜精未填写时暂用24小时；冷藏/冻精必须明确提供，不适用于按注射时间安排的促排方案。",
+    )
     left: FollicleMeasurement
     right: FollicleMeasurement
     previous: PreviousMeasurement | None = None
@@ -164,11 +174,30 @@ class PredictResponse(BaseModel):
     animal_id: str | None
     current_max_mm: float | None = None
     mature_now: bool | None = None
+    point_estimate_policy: Literal["window_lower_bound"] | None = Field(
+        default=None,
+        description="单点预测取最终窗口下界，优先提前安排；不保证早于真实时间。CL状态下为空。",
+    )
+    maturity_prediction: PointEstimate | None = Field(
+        default=None, description="对外使用的成熟单点预测，等于maturity_window的最早时间。",
+    )
     maturity_center: PointEstimate | None = None
     maturity_window: TimeWindow | None = None
+    ovulation_prediction: PointEstimate | None = Field(
+        default=None, description="对外使用的排卵单点预测，等于ovulation_window的最早时间。",
+    )
     ovulation_center: PointEstimate | None = None
     ovulation_window: TimeWindow | None = None
-    next_ultrasound_window: TimeWindow | None = None
+    breeding_status: Literal["planned", "method_required", "protocol_required", "post_ovulation"] | None = None
+    breeding_method: BreedingMethod | None = None
+    breeding_recommendation: PointEstimate | None = Field(
+        default=None,
+        description="默认鲜精建议配种时间：max(0,ovulation_prediction.hours-24)小时后。需现场确认，不将37 mm成熟参考作为硬门槛。",
+    )
+    breeding_lead_hours: float | None = None
+    breeding_lead_source: Literal["initial_default", "site_confirmed"] | None = None
+    breeding_policy: Literal["early_ovulation_minus_lead"] | None = None
+    breeding_note: str | None = None
     cl_confirmation_median: PointEstimate | None = None
     cl_confirmation_iqr: TimeWindow | None = None
     growth_rate_mm_day: float | None = None
@@ -199,10 +228,10 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="东阿驴卵泡成熟与排卵预测接口",
     description=(
-        "根据当前卵泡直径、可选历史摸排和促排时间，返回成熟时间、排卵窗口和建议复查时间。"
+        "返回偏早的成熟、排卵预测时刻和建议配种时刻，并保留参考窗口。页面使用北京时间显示具体日期和时刻。"
         "该接口为生产决策支持，不替代兽医超声判断。"
     ),
-    version="1.0.0",
+    version="1.4.0",
     docs_url="/docs" if ENABLE_DOCS else None,
     redoc_url="/redoc" if ENABLE_DOCS else None,
     lifespan=lifespan,
@@ -355,6 +384,9 @@ async def predict_follicle(payload: PredictRequest, request: Request) -> Predict
             model_version=model["model_version"],
             prediction_status="post_ovulation",
             animal_id=payload.animal_id,
+            breeding_status="post_ovulation",
+            breeding_method=payload.breeding_method,
+            breeding_note="当前已观察到CL，不输出本周期未来配种计划；请由现场人员评估后续安排。",
             observed_post_ovulation_interval=observed_interval,
             warnings=["当前已观察到CL，只能确认已经进入排卵后状态，不能反推出精确排卵时刻。"],
             disclaimer="结果用于安排复查和配种，不替代兽医超声判断。",
@@ -381,6 +413,11 @@ async def predict_follicle(payload: PredictRequest, request: Request) -> Predict
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    breeding = recommend_breeding(
+        result, payload.breeding_method,
+        induced_ovulation=payload.induction.used,
+        confirmed_lead_hours=payload.breeding_lead_hours,
+    )
     LOGGER.info("prediction_completed request_id=%s status=predicted", request_id)
     return PredictResponse(
         request_id=request_id,
@@ -390,23 +427,28 @@ async def predict_follicle(payload: PredictRequest, request: Request) -> Predict
         animal_id=payload.animal_id,
         current_max_mm=result.current_max_mm,
         mature_now=result.mature_now,
+        point_estimate_policy="window_lower_bound",
+        maturity_prediction=make_point(payload.current_time, result.maturity_prediction_hours),
         maturity_center=make_point(payload.current_time, result.maturity_center_hours),
         maturity_window=make_window(
             payload.current_time,
             result.maturity_lower_hours,
             result.maturity_upper_hours,
         ),
+        ovulation_prediction=make_point(payload.current_time, result.ovulation_prediction_hours),
         ovulation_center=make_point(payload.current_time, result.ovulation_center_hours),
         ovulation_window=make_window(
             payload.current_time,
             result.ovulation_lower_hours,
             result.ovulation_upper_hours,
         ),
-        next_ultrasound_window=make_window(
-            payload.current_time,
-            result.next_check_hours[0],
-            result.next_check_hours[1],
-        ),
+        breeding_status=breeding.status,
+        breeding_method=breeding.method,
+        breeding_recommendation=make_point(payload.current_time, breeding.hours) if breeding.hours is not None else None,
+        breeding_lead_hours=breeding.lead_hours,
+        breeding_lead_source=breeding.lead_source,
+        breeding_policy=breeding.policy,
+        breeding_note=breeding.note,
         cl_confirmation_median=make_point(
             payload.current_time,
             result.cl_confirmation_median_hours,
@@ -426,6 +468,7 @@ async def predict_follicle(payload: PredictRequest, request: Request) -> Predict
         support_note=result.support_note,
         warnings=list(result.warnings),
         disclaimer=(
+            "单点预测取对应窗口的最早时间，用于优先提前安排，不能保证早于真实成熟或排卵时间。"
             "排卵时间是结合文献先验和本场CL记录得到的风险窗口；"
             "首次确认CL时间不等于真实排卵时刻。本结果不替代兽医判断。"
         ),

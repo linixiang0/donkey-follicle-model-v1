@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="排卵模型第一版">
   <title>排卵模型第一版</title>
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=1.4.0">
 </head>
 <body>
   <header class="topbar">
@@ -88,7 +88,7 @@
       <section class="results-column">
         <div id="emptyState" class="panel empty-state">
           <h2>等待本次摸排数据</h2>
-          <p>生成预测后，这里将显示成熟时间、排卵窗口和随时间变化的卵泡趋势。</p>
+          <p>生成预测后，这里将显示成熟、排卵和建议配种的具体日期时刻，以及卵泡趋势。</p>
         </div>
 
         <div id="resultContent" hidden>
@@ -108,24 +108,23 @@
           <section id="predictionResults">
             <div class="metric-grid">
               <article class="metric-card maturity">
-                <div class="metric-label"><span class="metric-dot"></span>预计达到成熟参考</div>
-                <strong id="maturityCountdown">--</strong>
-                <span id="maturityTime">--</span>
-                <small id="maturityWindow">--</small>
+                <div class="metric-label"><span class="metric-dot"></span>成熟预测时间（偏早）</div>
+                <strong id="maturityTime">--</strong>
+                <small id="maturityState">--</small>
               </article>
               <article class="metric-card ovulation">
-                <div class="metric-label"><span class="metric-dot"></span>预计排卵中心</div>
-                <strong id="ovulationCountdown">--</strong>
-                <span id="ovulationTime">--</span>
-                <small id="ovulationWindow">--</small>
+                <div class="metric-label"><span class="metric-dot"></span>排卵预测时间（偏早）</div>
+                <strong id="ovulationTime">--</strong>
+                <small id="ovulationState">--</small>
               </article>
-              <article class="metric-card check">
-                <div class="metric-label"><span class="metric-dot"></span>建议下次超声</div>
-                <strong id="checkCountdown">--</strong>
-                <span id="checkTime">--</span>
-                <small>窗口内复查可继续缩小不确定性</small>
+              <article class="metric-card breeding">
+                <div class="metric-label"><span class="metric-dot"></span>建议配种时间（鲜精）</div>
+                <strong id="breedingTime">--</strong>
+                <small id="breedingNote">执行前需现场确认</small>
               </article>
             </div>
+
+            <p class="support-note">以上时间均为北京时间。成熟、排卵采用窗口最早时刻，配种按鲜精常规场景估计。</p>
 
             <section class="panel chart-panel">
               <div class="chart-heading">
@@ -175,6 +174,6 @@
   <footer>
     <span>结果用于辅助安排复查和配种，不替代兽医超声判断。</span>
   </footer>
-  <script src="/static/app.js" defer></script>
+  <script src="/static/app.js?v=1.4.0" defer></script>
 </body>
 </html>

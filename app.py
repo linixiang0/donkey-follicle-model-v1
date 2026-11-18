@@ -4,6 +4,7 @@ from datetime import date, datetime, time
 
 import streamlit as st
 
+from breeding_core import recommend_breeding
 from model_core import DEFAULT_MODEL_PATH, MAX_FOLLICLE_MM, MIN_FOLLICLE_MM, PredictionInput, at_time, load_model, predict
 
 
@@ -17,12 +18,6 @@ def get_model():
 
 def combined_datetime(day: date, clock: time) -> datetime:
     return datetime.combine(day, clock)
-
-
-def fmt_hours(value: float) -> str:
-    if value < 24:
-        return f"{value:.1f}小时"
-    return f"{value / 24:.1f}天（{value:.1f}小时）"
 
 
 def fmt_dt(value: datetime) -> str:
@@ -83,7 +78,7 @@ with st.expander("可选：促排信息"):
     injection_day = st.date_input("注射日期", value=date.today(), disabled=not induced)
     injection_clock = st.time_input("注射时间", value=time(8, 0), disabled=not induced)
 
-if st.button("开始预测", type="primary", use_container_width=True):
+if st.button("开始预测", type="primary"):
     current_time = combined_datetime(current_day, current_clock)
     statuses = {left_status, right_status}
 
@@ -93,8 +88,6 @@ if st.button("开始预测", type="primary", use_container_width=True):
             previous_time = combined_datetime(previous_day, previous_clock)
             if previous_time < current_time:
                 st.write(f"排卵发生区间：{fmt_dt(previous_time)} 至 {fmt_dt(current_time)}")
-                st.write(f"当前区间宽度：{fmt_hours((current_time - previous_time).total_seconds() / 3600)}")
-        st.warning("要缩小真实排卵时间区间，需要在高风险阶段每6～12小时复查。")
         st.stop()
 
     numeric_values = [value for value in (left_mm, right_mm) if value is not None]
@@ -121,46 +114,34 @@ if st.button("开始预测", type="primary", use_container_width=True):
         st.stop()
 
     st.subheader("预测结果")
-    a, b, c, d = st.columns(4)
+    st.caption("以下日期时刻均为北京时间。")
+    a, d = st.columns(2)
     a.metric("当前最大卵泡", f"{result.current_max_mm:g} mm")
     a.caption(f"生长速度：{result.growth_rate_mm_day:g} mm/天，{result.growth_rate_source}")
 
-    if result.mature_now:
-        b.metric("成熟状态", "已达到参考阈值")
-        b.caption("V1参考阈值为37 mm")
-    else:
-        b.metric("预计达到成熟", fmt_hours(result.maturity_center_hours))
-        b.caption(f"区间 {fmt_hours(result.maturity_lower_hours)}～{fmt_hours(result.maturity_upper_hours)}")
+    st.metric("成熟预测时间（偏早）", fmt_dt(at_time(current_time, result.maturity_prediction_hours)))
+    st.caption("当前已达到成熟参考" if result.mature_now else "按成熟窗口最早时刻预测")
 
-    c.metric("预计排卵中心", fmt_hours(result.ovulation_center_hours))
-    c.caption(f"最可能窗口 {fmt_hours(result.ovulation_lower_hours)}～{fmt_hours(result.ovulation_upper_hours)}")
+    st.metric("排卵预测时间（偏早）", fmt_dt(at_time(current_time, result.ovulation_prediction_hours)))
+    st.caption("从该时刻起重点关注" if result.ovulation_prediction_hours <= 0 else "按排卵窗口最早时刻预测")
 
     d.metric("模型支持", result.support_level)
     d.caption(result.support_note)
 
-    st.info(
-        f"预计排卵窗口：{fmt_dt(at_time(current_time, result.ovulation_lower_hours))} "
-        f"至 {fmt_dt(at_time(current_time, result.ovulation_upper_hours))}。"
-    )
+    st.caption("成熟和排卵的单点预测均采用对应窗口的最早时间，优先提前安排；仍可能晚于真实时间。")
 
-    check_low, check_high = result.next_check_hours
-    st.warning(
-        f"建议下一次超声：{fmt_dt(at_time(current_time, check_low))} 至 "
-        f"{fmt_dt(at_time(current_time, check_high))}。"
-    )
-
-    st.subheader("本场CL确认规律")
-    st.write(
-        f"按本场既往摸排制度，当前直径对应的首次CL确认中位时间约为 "
-        f"{fmt_hours(result.cl_confirmation_median_hours)}；四分位区间为 "
-        f"{fmt_hours(result.cl_confirmation_iqr_hours[0])}～{fmt_hours(result.cl_confirmation_iqr_hours[1])}。"
-    )
-    st.caption("CL确认时间通常晚于或等于真实排卵时间，不能把它直接当作排卵发生时刻。")
+    breeding = recommend_breeding(result, induced_ovulation=induced)
+    st.subheader("建议配种时间（鲜精）")
+    if breeding.hours is not None:
+        st.metric("建议配种时间", fmt_dt(at_time(current_time, breeding.hours)))
+    st.info(breeding.note)
 
     for warning in result.warnings:
         st.warning(warning)
 
     with st.expander("计算依据与限制"):
+        st.write(f"首次CL确认参考时刻：{fmt_dt(at_time(current_time, result.cl_confirmation_median_hours))}")
+        st.caption("CL确认时间通常晚于或等于真实排卵时间，不能把它直接当作排卵发生时刻。")
         profile = profiles[item.breed_profile]
         st.write(f"成熟参考直径：{profile['maturity_reference_mm']} mm")
         st.write(f"排卵前参考直径：{profile['preovulatory_reference_mm']} mm")

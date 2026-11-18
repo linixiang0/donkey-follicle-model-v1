@@ -4,7 +4,7 @@ WORKDIR /app
 COPY requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt
 
-COPY api.py model_core.py ./
+COPY api.py model_core.py breeding_core.py ./
 COPY models ./models
 COPY web ./web
 

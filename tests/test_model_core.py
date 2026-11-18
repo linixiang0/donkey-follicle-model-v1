@@ -19,11 +19,11 @@ class ModelCoreTests(unittest.TestCase):
         self.assertLess(result.maturity_center_hours, 50)
         self.assertLess(result.ovulation_lower_hours, result.ovulation_upper_hours)
 
-    def test_40mm_is_mature_and_high_risk(self):
+    def test_40mm_is_mature_and_ovulation_within_24_hours(self):
         result = predict(PredictionInput(self.now, 40.0), self.model)
         self.assertTrue(result.mature_now)
         self.assertEqual(result.maturity_center_hours, 0)
-        self.assertLessEqual(result.next_check_hours[1], 12)
+        self.assertLessEqual(result.ovulation_prediction_hours, 24)
 
     def test_individual_growth_changes_rate(self):
         result = predict(
@@ -64,6 +64,36 @@ class ModelCoreTests(unittest.TestCase):
         self.assertGreaterEqual(result.ovulation_lower_hours, 12)
         self.assertLessEqual(result.ovulation_upper_hours, 36)
 
+    def test_early_output_35mm_regression(self):
+        result = predict(PredictionInput(self.now, 35.0), self.model)
+        self.assertEqual(result.maturity_prediction_hours, 8.1)
+        self.assertEqual(result.ovulation_prediction_hours, 40.2)
+        # Preserve the old centers for integrations and the mean-growth curve.
+        self.assertEqual(result.maturity_center_hours, 11.1)
+        self.assertEqual(result.ovulation_center_hours, 55.5)
+        self.assertEqual(result.to_dict()["ovulation_prediction_hours"], 40.2)
+
+    def test_early_output_uses_final_induction_window(self):
+        for diameter in (30.0, 35.0, 40.0, 45.0, 60.0):
+            for since_injection in (0, 12, 36, 60):
+                with self.subTest(diameter=diameter, since_injection=since_injection):
+                    result = predict(
+                        PredictionInput(
+                            self.now, diameter,
+                            induced_ovulation=True,
+                            injection_time=self.now - timedelta(hours=since_injection),
+                        ),
+                        self.model,
+                    )
+                    self.assertEqual(result.ovulation_prediction_hours, result.ovulation_lower_hours)
+                    self.assertLessEqual(result.ovulation_prediction_hours, result.ovulation_center_hours)
+        # 45 mm starts at zero naturally; recent induction moves the lower bound.
+        adjusted = predict(
+            PredictionInput(self.now, 45.0, induced_ovulation=True, injection_time=self.now - timedelta(hours=12)),
+            self.model,
+        )
+        self.assertEqual(adjusted.ovulation_prediction_hours, 12.0)
+
     def test_out_of_range_current_diameter_is_rejected(self):
         # 1 mm曾产生177.1～168小时的倒置窗口，必须在计算前拒绝。
         for diameter in (1.0, 29.9, 60.1, float("nan"), float("inf")):
@@ -102,6 +132,10 @@ class ModelCoreTests(unittest.TestCase):
                         self.assertLessEqual(result.maturity_center_hours, result.maturity_upper_hours)
                         self.assertLessEqual(result.ovulation_lower_hours, result.ovulation_center_hours)
                         self.assertLessEqual(result.ovulation_center_hours, result.ovulation_upper_hours)
+                        self.assertEqual(result.maturity_prediction_hours, result.maturity_lower_hours)
+                        self.assertEqual(result.ovulation_prediction_hours, result.ovulation_lower_hours)
+                        self.assertGreaterEqual(result.maturity_prediction_hours, 0)
+                        self.assertGreaterEqual(result.ovulation_prediction_hours, 0)
 
 
 if __name__ == "__main__":

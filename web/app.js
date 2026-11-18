@@ -171,7 +171,7 @@ function renderResult(result, payload) {
   $("emptyState").hidden = true;
   $("resultContent").hidden = false;
   $("resultTitle").textContent = "预测结果";
-  $("resultSubtitle").textContent = `${formatDateTime(payload.current_time)} · 模型 ${result.model_version}`;
+  $("resultSubtitle").textContent = `${formatDateTime(payload.current_time)} · 北京时间 · 模型 ${result.model_version}`;
 
   if (result.prediction_status === "post_ovulation") {
     $("postOvulation").hidden = false;
@@ -191,14 +191,13 @@ function renderResult(result, payload) {
   $("supportBadge").textContent = `数据支持度：${support}`;
   $("supportBadge").className = `support-badge${support === "较弱" ? " weak" : ""}`;
 
-  $("maturityCountdown").textContent = result.mature_now ? "当前已达参考" : formatDuration(result.maturity_center.hours);
-  $("maturityTime").textContent = formatDateTime(result.maturity_center.time);
-  $("maturityWindow").textContent = `可能范围：${formatWindow(result.maturity_window)}`;
-  $("ovulationCountdown").textContent = formatDuration(result.ovulation_center.hours);
-  $("ovulationTime").textContent = formatDateTime(result.ovulation_center.time);
-  $("ovulationWindow").textContent = `风险窗口：${formatWindow(result.ovulation_window)}`;
-  $("checkCountdown").textContent = `${formatShortHours(result.next_ultrasound_window.lower_hours)}–${formatShortHours(result.next_ultrasound_window.upper_hours)}`;
-  $("checkTime").textContent = formatWindow(result.next_ultrasound_window);
+  $("maturityTime").textContent = formatDateTime(result.maturity_prediction.time);
+  $("maturityState").textContent = result.mature_now ? "当前已达到成熟参考" : "按成熟窗口最早时刻预测";
+  $("ovulationTime").textContent = formatDateTime(result.ovulation_prediction.time);
+  $("ovulationState").textContent = result.ovulation_prediction.hours <= 0 ? "从该时刻起重点关注" : "按排卵窗口最早时刻预测";
+  const breeding = result.breeding_recommendation;
+  $("breedingTime").textContent = breeding ? formatDateTime(breeding.time) : "--";
+  $("breedingNote").textContent = result.breeding_note || "执行前需现场确认";
 
   $("currentMax").textContent = `${formatNumber(result.current_max_mm)} mm`;
   $("growthRate").textContent = `${formatNumber(result.growth_rate_mm_day)} mm/天（${result.growth_rate_source}）`;
@@ -224,31 +223,18 @@ function formatNumber(value) {
   return Number(value).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
 }
 
-function formatDuration(hours) {
-  const value = Number(hours);
-  if (value <= 0.05) return "当前已达到";
-  if (value < 24) return `约 ${value.toFixed(1)} 小时`;
-  return `约 ${(value / 24).toFixed(1)} 天`;
-}
-
-function formatShortHours(hours) {
-  const value = Number(hours);
-  return value >= 24 ? `${(value / 24).toFixed(1)}天` : `${value.toFixed(0)}小时`;
-}
-
 function formatDateTime(value) {
-  return new Intl.DateTimeFormat("zh-CN", {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
+    year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
-  }).format(new Date(value)).replaceAll("/", "-");
-}
-
-function formatWindow(windowValue) {
-  return `${formatDateTime(windowValue.lower_time)} — ${formatDateTime(windowValue.upper_time)}`;
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const fields = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${fields.year}-${fields.month}-${fields.day} ${fields.hour}:${fields.minute}`;
 }
 
 function showError(message) {
@@ -285,9 +271,10 @@ function drawGrowthChart(result, payload) {
   const ovLower = Number(result.ovulation_window.lower_hours);
   const ovCenter = Math.max(0.1, Number(result.ovulation_center.hours));
   const ovUpper = Number(result.ovulation_window.upper_hours);
-  const maturityCenter = Number(result.maturity_center.hours);
+  const ovPrediction = Number(result.ovulation_prediction.hours);
+  const maturityPrediction = Number(result.maturity_prediction.hours);
   const xMin = Math.min(-6, previousHours - 3);
-  const xMax = Math.max(24, ovUpper + 4, maturityCenter + 6);
+  const xMax = Math.max(24, ovUpper + 4, maturityPrediction + 6);
   const centerRate = Number(result.growth_rate_mm_day);
   const slowRate = Number(result.growth_rate_lower_mm_day);
   const fastRate = Number(result.growth_rate_upper_mm_day);
@@ -352,10 +339,14 @@ function drawGrowthChart(result, payload) {
   }
   drawPoint(svg, x(0), y(currentMm), "#17342d", `当前实测 ${formatNumber(currentMm)} mm`);
 
-  if (maturityCenter >= 0 && maturityCenter <= xMax) {
-    drawVerticalMarker(svg, x(maturityCenter), margin, height, "成熟中心", "#3c9276");
+  if (maturityPrediction >= 0 && maturityPrediction <= xMax) {
+    drawVerticalMarker(svg, x(maturityPrediction), margin, height, "成熟预测（偏早）", "#3c9276");
   }
-  drawVerticalMarker(svg, x(ovCenter), margin, height, "排卵中心", "#d78340");
+  const ovulationLabelOffset = Math.abs(x(ovPrediction) - x(maturityPrediction)) < 150 ? 50 : 35;
+  drawVerticalMarker(svg, x(ovPrediction), margin, height, "排卵预测（偏早）", "#d78340", ovulationLabelOffset);
+  if (result.breeding_recommendation) {
+    drawVerticalMarker(svg, x(result.breeding_recommendation.hours), margin, height, "配种建议（鲜精）", "#8260ad", 65);
+  }
 
   const sliderPct = Number($("timelineSlider").value) / 100;
   const simulatedHour = ovCenter * sliderPct;
@@ -375,9 +366,9 @@ function drawPoint(svg, px, py, color, label) {
   svg.appendChild(point);
 }
 
-function drawVerticalMarker(svg, px, margin, height, label, color) {
+function drawVerticalMarker(svg, px, margin, height, label, color, labelOffset = 35) {
   svg.appendChild(svgElement("line", { x1: px, y1: margin.top + 25, x2: px, y2: height - margin.bottom, stroke: color, "stroke-width": 1.5, "stroke-dasharray": "4 5", opacity: .75 }));
-  svg.appendChild(svgElement("text", { x: px + 6, y: margin.top + 35, fill: color, "font-size": 10, "font-weight": 800 }, label));
+  svg.appendChild(svgElement("text", { x: px + 6, y: margin.top + labelOffset, fill: color, "font-size": 10, "font-weight": 800 }, label));
 }
 
 function drawSimulationMarker(svg, px, py, margin, height, label) {

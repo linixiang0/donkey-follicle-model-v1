@@ -37,12 +37,13 @@ class PredictionOutput:
     maturity_center_hours: float
     maturity_lower_hours: float
     maturity_upper_hours: float
+    maturity_prediction_hours: float
     ovulation_center_hours: float
     ovulation_lower_hours: float
     ovulation_upper_hours: float
+    ovulation_prediction_hours: float
     cl_confirmation_median_hours: float
     cl_confirmation_iqr_hours: tuple[float, float]
-    next_check_hours: tuple[float, float]
     support_level: str
     support_note: str
     warnings: tuple[str, ...]
@@ -122,16 +123,6 @@ def _support(current_mm: float, anchors: list[dict[str, Any]]) -> tuple[str, str
     return "较弱", "输入直径远离本场主要的30、35、40 mm记录，结果包含外推。"
 
 
-def _recommend_check(current_mm: float, ovulation_lower: float) -> tuple[float, float]:
-    if ovulation_lower <= 12 or current_mm >= 40:
-        return (6.0, 12.0)
-    if current_mm >= 35:
-        return (12.0, 18.0)
-    if current_mm >= 30:
-        return (18.0, 24.0)
-    return (24.0, 48.0)
-
-
 def predict(item: PredictionInput, model: dict[str, Any]) -> PredictionOutput:
     if not math.isfinite(item.current_max_mm) or not (
         MIN_FOLLICLE_MM <= item.current_max_mm <= MAX_FOLLICLE_MM
@@ -207,7 +198,6 @@ def predict(item: PredictionInput, model: dict[str, Any]) -> PredictionOutput:
     if item.induced_ovulation and warnings and "不重叠" in warnings[-1]:
         support_level = "较弱"
 
-    next_check = _recommend_check(item.current_max_mm, ov_lower)
     return PredictionOutput(
         current_max_mm=round(item.current_max_mm, 2),
         growth_rate_mm_day=round(growth, 2),
@@ -220,12 +210,14 @@ def predict(item: PredictionInput, model: dict[str, Any]) -> PredictionOutput:
         maturity_center_hours=round(maturity_center, 1),
         maturity_lower_hours=round(maturity_lower, 1),
         maturity_upper_hours=round(maturity_upper, 1),
+        maturity_prediction_hours=round(maturity_lower, 1),
         ovulation_center_hours=round(ov_center, 1),
         ovulation_lower_hours=round(ov_lower, 1),
         ovulation_upper_hours=round(ov_upper, 1),
+        # Apply the early-output policy after all induction-window adjustments.
+        ovulation_prediction_hours=round(ov_lower, 1),
         cl_confirmation_median_hours=round(cl_median, 1),
         cl_confirmation_iqr_hours=(round(cl_q25, 1), round(cl_q75, 1)),
-        next_check_hours=next_check,
         support_level=support_level,
         support_note=support_note,
         warnings=tuple(warnings),
